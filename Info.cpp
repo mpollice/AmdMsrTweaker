@@ -13,7 +13,6 @@
 using std::min;
 using std::max;
 
-
 // divisors for families 0x10 and 0x15
 static const double DIVISORS_10_15[] = { 1.0, 2.0, 4.0, 8.0, 16.0, 0.0 };
 // special divisors for family 0x12
@@ -42,6 +41,21 @@ bool Info::Initialize()
 	if (!(Family == 0x10 || Family == 0x12 || Family == 0x14 || Family == 0x15))
 		return false;
 
+	// read model
+	Model = GetBits(regs.eax, 4, 4) + (GetBits(regs.eax, 16, 4) << 4);
+
+	//set VID step for SVI2 platforms (otherwise 0.0125 is assumed, see header)
+	// Family 0x15 Models 10-1F is Trinity/Richland
+	// Family 0x15 Models 30-3F is Kaveri
+	if (Family == 0x15 && ((Model > 0xF && Model < 0x20) || (Model > 0x2F && Model < 0x40)))
+		VIDStep = 0.00625;
+
+	// scale factor from external multi to internal one (default 1, set for 200MHz REFCLK platforms)
+	// Family 0x10 includes all AM2+/AM3 K10 CPUs
+	// Family 0x15 Models 0-F is Bulldozer/Piledriver
+	if (Family == 0x10 || (Family == 0x15 && Model < 0x10))
+		multiScaleFactor = 2.0;
+
 	// number of physical cores
 	regs = Cpuid(0x80000008);
 	NumCores = GetBits(regs.ecx, 0, 8) + 1;
@@ -49,6 +63,12 @@ bool Info::Initialize()
 	// number of hardware P-states
 	eax = ReadPciConfig(3, 0xdc);
 	NumPStates = GetBits(eax, 8, 3) + 1;
+
+	if (Family == 0x15)
+	{
+		eax = ReadPciConfig(0xf5, 0x170);
+		NumNBPStates = (eax & 0x3) + 1;
+	}
 
 	// get limits
 	msr = Rdmsr(0xc0010071);
@@ -139,8 +159,11 @@ PStateInfo Info::ReadPState(int index) const
 
 	result.Multi = DecodeMulti(fid, did);
 
-	const int vid = GetBits(msr, 9, 7);
-	result.VID = DecodeVID(vid);
+	//on SVI2 platforms, VID is 8 bits
+	if (Family == 0x15 && ((Model > 0xF && Model < 0x20) || (Model > 0x2F && Model < 0x40)))
+		result.VID = GetBits(msr, 9, 8);
+	else
+		result.VID = GetBits(msr, 9, 7);
 
 	if (!(Family == 0x12 || Family == 0x14))
 	{
@@ -152,11 +175,10 @@ PStateInfo Info::ReadPState(int index) const
 
 	if (Family == 0x10)
 	{
-		const int nbVid = GetBits(msr, 25, 7);
-		result.NBVID = DecodeVID(nbVid);
+		result.NBVID = GetBits(msr, 25, 7);
 	}
 	else
-		result.NBVID = -1.0;
+		result.NBVID = -1;
 
 	return result;
 }
@@ -190,8 +212,11 @@ void Info::WritePState(const PStateInfo& info) const
 
 	if (info.VID >= 0)
 	{
-		const int vid = EncodeVID(info.VID);
-		SetBits(msr, vid, 9, 7);
+		//on SVI2 platforms, VID is 8 bits
+		if (Family == 0x15 && ((Model > 0xF && Model < 0x20) || (Model > 0x2F && Model < 0x40)))
+			SetBits(msr, info.VID, 9, 8);
+		else
+			SetBits(msr, info.VID, 9, 7);
 	}
 
 	if (info.NBPState >= 0)
@@ -207,8 +232,7 @@ void Info::WritePState(const PStateInfo& info) const
 	{
 		if (Family == 0x10)
 		{
-			const int nbVid = EncodeVID(info.NBVID);
-			SetBits(msr, nbVid, 25, 7);
+			SetBits(msr, info.NBVID, 25, 7);
 		}
 	}
 
@@ -229,10 +253,14 @@ NBPStateInfo Info::ReadNBPState(int index) const
 
 	const int fid = GetBits(eax, 1, 5);
 	const int did = GetBits(eax, 7, 1);
-	const int vid = GetBits(eax, 10, 7);
+	int vid = GetBits(eax, 10, 7);
+
+	//on SVI2 platforms, 8th bit for NB P-State is stored separately
+	if (Family == 0x15 && ((Model > 0xF && Model < 0x20) || (Model > 0x2F && Model < 0x40)))
+		vid += (GetBits(eax, 21, 1) << 7);
 
 	result.Multi = (fid + 4) / pow(2.0, did);
-	result.VID = DecodeVID(vid);
+	result.VID = vid;
 
 	return result;
 }
@@ -261,8 +289,11 @@ void Info::WriteNBPState(const NBPStateInfo& info) const
 
 	if (info.VID >= 0)
 	{
-		const int vid = EncodeVID(info.VID);
-		SetBits(eax, vid, 10, 7);
+		SetBits(eax, info.VID, 10, 7);
+
+		//on SVI2 platforms, 8th bit for NB P-State is stored separately
+		if (Family == 0x15 && ((Model > 0xF && Model < 0x20) || (Model > 0x2F && Model < 0x40)))
+			SetBits(eax, (info.VID >> 7), 21, 1);
 	}
 
 	WritePciConfig(5, regAddress, eax);
@@ -407,18 +438,18 @@ void Info::EncodeMulti(double multi, int& fid, int& did) const
 
 double Info::DecodeVID(int vid) const
 {
-	return 1.55 - vid * 0.0125;
+	return 1.55 - vid * VIDStep;
 }
 
 int Info::EncodeVID(double vid) const
 {
 	vid = max(0.0, min(1.55, vid));
 
-	// round to nearest 0.0125 step
-	int r = (int)(vid / 0.0125 + 0.5);
+	// round to nearest step
+	int r = (int)(vid / VIDStep + 0.5);
 
-	// 1.55 = 124 * 0.0125
-	return 124 - r;
+	//1.55 / VIDStep = highest VID (0 V)
+	return (int)(1.55 / VIDStep) - r;
 }
 
 

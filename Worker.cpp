@@ -38,11 +38,8 @@ bool Worker::ParseParams(int argc, const char* argv[])
 {
 	const Info& info = *_info;
 
-	// scale factor from external multi to internal one (100 MHz reference)
-	const double multiScaleFactor = (info.Family == 0x12 || info.Family == 0x14 ? 1.0 : 2.0);
-
 	PStateInfo psi;
-	psi.Multi = psi.VID = psi.NBVID = -1.0;
+	psi.Multi = psi.VID = psi.NBVID = -1;
 	psi.NBPState = -1;
 
 	NBPStateInfo nbpsi;
@@ -53,7 +50,7 @@ bool Worker::ParseParams(int argc, const char* argv[])
 		_pStates.push_back(psi);
 		_pStates.back().Index = i;
 	}
-	for (int i = 0; i < 2; i++)
+	for (int i = 0; i < info.NumNBPStates; i++)
 	{
 		_nbPStates.push_back(nbpsi);
 		_nbPStates.back().Index = i;
@@ -89,9 +86,9 @@ bool Worker::ParseParams(int argc, const char* argv[])
 					SplitPair(multi, vid, value, '@');
 
 					if (!multi.empty())
-						_pStates[index].Multi = multiScaleFactor * atof(multi.c_str());
+						_pStates[index].Multi = info.multiScaleFactor * atof(multi.c_str());
 					if (!vid.empty())
-						_pStates[index].VID = atof(vid.c_str());
+						_pStates[index].VID = info.EncodeVID(atof(vid.c_str()));
 
 					continue;
 				}
@@ -100,7 +97,7 @@ bool Worker::ParseParams(int argc, const char* argv[])
 			if (key.length() >= 5 && _strnicmp(key.c_str(), "NB_P", 4) == 0)
 			{
 				const int index = atoi(key.c_str() + 4);
-				if (index >= 0 && index < 2)
+				if (index >= 0 && index < info.NumNBPStates)
 				{
 					string multi, vid;
 					SplitPair(multi, vid, value, '@');
@@ -108,7 +105,7 @@ bool Worker::ParseParams(int argc, const char* argv[])
 					if (!multi.empty())
 						_nbPStates[index].Multi = atof(multi.c_str());
 					if (!vid.empty())
-						_nbPStates[index].VID = atof(vid.c_str());
+						_nbPStates[index].VID = info.EncodeVID(atof(vid.c_str()));
 
 					continue;
 				}

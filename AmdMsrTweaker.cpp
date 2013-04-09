@@ -78,17 +78,15 @@ int main(int argc, const char* argv[])
 
 void PrintInfo(const Info& info)
 {
-	// scale factor from internal multi (100 MHz reference) to external one
-	const double multiScaleFactor = (info.Family == 0x12 || info.Family == 0x14 ? 1.0 : 0.5);
-
 	cout << endl;
-	cout << "AmdMsrTweaker" << endl;
+	cout << "AmdMsrTweaker v1.1" << endl;
 	cout << endl;
 
 	cout << ".:. General" << endl << "---" << endl;
-	cout << "  AMD family 0x" << std::hex << info.Family << std::dec << " CPU, " << info.NumCores << " cores" << endl;
-	cout << "  Available multipliers: " << (multiScaleFactor * info.MinMulti) << " .. " << (multiScaleFactor * info.MaxSoftwareMulti) << endl;
-	cout << "  Available voltage IDs: " << info.MinVID << " .. " << info.MaxVID << endl;
+	cout << "  AMD family 0x" << std::hex << info.Family << ", model 0x" << info.Model << std::dec << " CPU, " << info.NumCores << " cores" << endl;
+	cout << "  Default reference clock: " << info.multiScaleFactor * 100 << " MHz" << endl;
+	cout << "  Available multipliers: " << (info.MinMulti / info.multiScaleFactor) << " .. " << (info.MaxSoftwareMulti / info.multiScaleFactor) << endl;
+	cout << "  Available voltage IDs: " << info.MinVID << " .. " << info.MaxVID << " (" << info.VIDStep << " steps)" << endl;
 	cout << endl;
 
 	cout << ".:. Turbo" << endl << "---" << endl;
@@ -100,7 +98,7 @@ void PrintInfo(const Info& info)
 		cout << "  " << (info.IsBoostLocked ? "locked" : "unlocked") << endl;
 
 		if (info.MaxMulti != info.MaxSoftwareMulti)
-			cout << "  Max multiplier: " << (multiScaleFactor * info.MaxMulti) << endl;
+			cout << "  Max multiplier: " << (info.MaxMulti / info.multiScaleFactor) << endl;
 	}
 	cout << endl;
 
@@ -121,13 +119,13 @@ void PrintInfo(const Info& info)
 	{
 		const PStateInfo pi = info.ReadPState(i);
 
-		cout << "  P" << i << ": " << (multiScaleFactor * pi.Multi) << "x at " << pi.VID << "V" << endl;
+		cout << "  P" << i << ": " << (pi.Multi / info.multiScaleFactor) << "x at " << info.DecodeVID(pi.VID) << "V" << endl;
 
 		if (pi.NBPState >= 0)
 		{
 			cout << "      NorthBridge in NB_P" << pi.NBPState;
 			if (pi.NBVID >= 0)
-				cout << " at " << pi.NBVID << "V";
+				cout << " at " << info.DecodeVID(pi.NBVID) << "V";
 			cout << endl;
 		}
 	}
@@ -136,13 +134,10 @@ void PrintInfo(const Info& info)
 	{
 		cout << "  ---" << endl;
 
-		DWORD eax = ReadPciConfig(0xf5, 0x170);
-		int numNBPStates = (eax & 0x3) + 1;
-
-		for (int i = 0; i < numNBPStates; i++)
+		for (int i = 0; i < info.NumNBPStates; i++)
 		{
 			const NBPStateInfo pi = info.ReadNBPState(i);
-			cout << "  NB_P" << i << ": " << pi.Multi << "x at " << pi.VID << "V" << endl;
+			cout << "  NB_P" << i << ": " << pi.Multi << "x at " << info.DecodeVID(pi.VID) << "V" << endl;
 		}
 	}
 }
