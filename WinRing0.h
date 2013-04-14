@@ -25,9 +25,10 @@ struct CpuidRegs
 	DWORD edx;
 };
 
+static const DWORD AMD_CPU_DEVICE = 0x18; // first AMD CPU
 
-DWORD ReadPciConfig(DWORD function, DWORD regAddress);
-void WritePciConfig(DWORD function, DWORD regAddress, DWORD value);
+DWORD ReadPciConfig(DWORD device, DWORD function, DWORD regAddress);
+void WritePciConfig(DWORD device, DWORD function, DWORD regAddress, DWORD value);
 
 QWORD Rdmsr(DWORD index);
 void Wrmsr(DWORD index, const QWORD& value);

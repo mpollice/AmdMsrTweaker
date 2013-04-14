@@ -15,12 +15,9 @@ using std::exception;
 using std::string;
 
 
-static const DWORD PCI_DEVICE = 0x18; // first AMD CPU
-
-
-DWORD ReadPciConfig(DWORD function, DWORD regAddress)
+DWORD ReadPciConfig(DWORD device, DWORD function, DWORD regAddress)
 {
-	const DWORD pciAddress = ((PCI_DEVICE & 0x1f) << 3) | (function & 0x7);
+	const DWORD pciAddress = ((device & 0x1f) << 3) | (function & 0x7);
 
 	DWORD result;
 	if (!ReadPciConfigDwordEx(pciAddress, regAddress, &result))
@@ -37,9 +34,9 @@ DWORD ReadPciConfig(DWORD function, DWORD regAddress)
 	return result;
 }
 
-void WritePciConfig(DWORD function, DWORD regAddress, DWORD value)
+void WritePciConfig(DWORD device, DWORD function, DWORD regAddress, DWORD value)
 {
-	const DWORD pciAddress = ((PCI_DEVICE & 0x1f) << 3) | (function & 0x7);
+	const DWORD pciAddress = ((device & 0x1f) << 3) | (function & 0x7);
 
 	if (!WritePciConfigDwordEx(pciAddress, regAddress, value))
 	{

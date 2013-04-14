@@ -61,12 +61,12 @@ bool Info::Initialize()
 	NumCores = GetBits(regs.ecx, 0, 8) + 1;
 
 	// number of hardware P-states
-	eax = ReadPciConfig(3, 0xdc);
+	eax = ReadPciConfig(AMD_CPU_DEVICE, 3, 0xdc);
 	NumPStates = GetBits(eax, 8, 3) + 1;
 
 	if (Family == 0x15)
 	{
-		eax = ReadPciConfig(0xf5, 0x170);
+		eax = ReadPciConfig(AMD_CPU_DEVICE, 0xf5, 0x170);
 		NumNBPStates = (eax & 0x3) + 1;
 	}
 
@@ -100,7 +100,7 @@ bool Info::Initialize()
 		const bool cpbDis = (GetBits(msr, 25, 1) == 1);
 
 		// boost lock, number of boost P-states and boost source
-		eax = ReadPciConfig(4, 0x15c);
+		eax = ReadPciConfig(AMD_CPU_DEVICE, 4, 0x15c);
 		IsBoostLocked = (Family == 0x12 ? true
 		                                : GetBits(eax, 31, 1) == 1);
 		NumBoostStates = (Family == 0x10 ? GetBits(eax, 2, 1)
@@ -114,14 +114,14 @@ bool Info::Initialize()
 		// max multi for software P-states (families 0x10 and 0x15)
 		if (Family == 0x10)
 		{
-			eax = ReadPciConfig(3, 0x1f0);
+			eax = ReadPciConfig(AMD_CPU_DEVICE, 3, 0x1f0);
 			const int maxSoftwareMulti = GetBits(eax, 20, 6);
 			MaxSoftwareMulti = (maxSoftwareMulti == 0 ? 63
 			                                          : maxSoftwareMulti);
 		}
 		else if (Family == 0x15)
 		{
-			eax = ReadPciConfig(3, 0xd4);
+			eax = ReadPciConfig(AMD_CPU_DEVICE, 3, 0xd4);
 			const int maxSoftwareMulti = GetBits(eax, 0, 6);
 			MaxSoftwareMulti = (maxSoftwareMulti == 0 ? 63
 			                                          : maxSoftwareMulti);
@@ -249,7 +249,7 @@ NBPStateInfo Info::ReadNBPState(int index) const
 	NBPStateInfo result;
 	result.Index = index;
 
-	const DWORD eax = ReadPciConfig(5, 0x160 + index * 4);
+	const DWORD eax = ReadPciConfig(AMD_CPU_DEVICE, 5, 0x160 + index * 4);
 
 	const int fid = GetBits(eax, 1, 5);
 	const int did = GetBits(eax, 7, 1);
@@ -271,7 +271,7 @@ void Info::WriteNBPState(const NBPStateInfo& info) const
 		throw std::exception("NB P-states not supported");
 
 	const DWORD regAddress = 0x160 + info.Index * 4;
-	DWORD eax = ReadPciConfig(5, regAddress);
+	DWORD eax = ReadPciConfig(AMD_CPU_DEVICE, 5, regAddress);
 
 	if (info.Multi >= 0)
 	{
@@ -296,7 +296,7 @@ void Info::WriteNBPState(const NBPStateInfo& info) const
 			SetBits(eax, (info.VID >> 7), 21, 1);
 	}
 
-	WritePciConfig(5, regAddress, eax);
+	WritePciConfig(AMD_CPU_DEVICE, 5, regAddress, eax);
 }
 
 
@@ -316,11 +316,11 @@ void Info::SetBoostSource(bool enabled) const
 	if (!IsBoostSupported)
 		throw std::exception("CPB not supported");
 
-	DWORD eax = ReadPciConfig(4, 0x15c);
+	DWORD eax = ReadPciConfig(AMD_CPU_DEVICE, 4, 0x15c);
 	const int bits = (enabled ? (Family == 0x10 ? 3 : 1)
 	                          : 0);
 	SetBits(eax, bits, 0, 2);
-	WritePciConfig(4, 0x15c, eax);
+	WritePciConfig(AMD_CPU_DEVICE, 4, 0x15c, eax);
 }
 
 void Info::SetAPM(bool enabled) const
@@ -328,9 +328,9 @@ void Info::SetAPM(bool enabled) const
 	if (Family != 0x15)
 		throw std::exception("APM not supported");
 
-	DWORD eax = ReadPciConfig(4, 0x15c);
+	DWORD eax = ReadPciConfig(AMD_CPU_DEVICE, 4, 0x15c);
 	SetBits(eax, (enabled ? 1 : 0), 7, 1);
-	WritePciConfig(4, 0x15c, eax);
+	WritePciConfig(AMD_CPU_DEVICE, 4, 0x15c, eax);
 }
 
 
