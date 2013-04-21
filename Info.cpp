@@ -66,7 +66,7 @@ bool Info::Initialize()
 
 	if (Family == 0x15)
 	{
-		eax = ReadPciConfig(AMD_CPU_DEVICE, 0xf5, 0x170);
+		eax = ReadPciConfig(AMD_CPU_DEVICE, 5, 0x170);
 		NumNBPStates = (eax & 0x3) + 1;
 	}
 
